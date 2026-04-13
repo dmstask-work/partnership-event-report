@@ -9,7 +9,7 @@ import dash_bootstrap_components as dbc
 
 # ── Data ───────────────────────────────────────────────────────────────────
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_PATH = os.path.join(BASE_DIR, "data_clean", "participants_clean.csv")
+DATA_PATH = os.path.join(BASE_DIR, "data_clean", "data_clean_enrich.csv")
 
 df_raw = pd.read_csv(DATA_PATH, encoding="utf-8-sig")
 
