@@ -9,9 +9,9 @@ import dash_bootstrap_components as dbc
 
 # ── Data ───────────────────────────────────────────────────────────────────
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_PATH = os.path.join(BASE_DIR, "data_clean", "participants_clean.csv")
+DATA_PATH = os.path.join(BASE_DIR, "data_clean", "data_merged.xlsx")
 
-df_raw = pd.read_csv(DATA_PATH, encoding="utf-8-sig")
+df_raw = pd.read_excel(DATA_PATH)
 
 # Build a combined event label that distinguishes same-name events at different locations
 df_raw["Event Label"] = df_raw.apply(
@@ -20,6 +20,17 @@ df_raw["Event Label"] = df_raw.apply(
     else r["Nama Event"],
     axis=1,
 )
+
+# ── Frequency bucket per Nama (computed on full dataset — person property) ──
+_freq_map = df_raw["Nama"].value_counts()
+df_raw["_freq"] = df_raw["Nama"].map(_freq_map)
+df_raw["Frekuensi Kehadiran"] = df_raw["_freq"].apply(
+    lambda x: ">5 Kali" if x > 5 else ("2-5 Kali" if x >= 2 else "1 Kali")
+)
+df_raw = df_raw.drop(columns=["_freq"])
+
+FREQ_ORDER    = ["1 Kali", "2-5 Kali", ">5 Kali"]
+WILAYAH_ORDER = ["Jabodetabek", "Jawa Tengah", "Jawa Timur", "Bali"]
 
 # ── Palette ────────────────────────────────────────────────────────────────
 PALETTE = [
@@ -84,7 +95,7 @@ def parse_topics(text, known):
 app = Dash(
     __name__,
     external_stylesheets=[dbc.themes.BOOTSTRAP],
-    title="PE Report",
+    title="Partnership & Event Report",
 )
 server = app.server
 
@@ -104,11 +115,11 @@ app.layout = dbc.Container([
     dbc.Row(dbc.Col(
         html.Div([
             html.H3("📊 Dashboard Report Partnership & Event", className="mb-0 fw-bold"),
-            html.P("Summary data event & partnership",
+            html.P("Summary data partnership & event",
                    className="mb-0 text-black-50 small"),
         ], className="py-3 px-4"),
     ), style={"background": "linear-gradient(135deg, #ADD3FA 0%, #B9EBFA 100%)",
-              "borderRadius": "0 0 16px 16px", "marginBottom": "24px"}),
+              "borderRadius": "0 0 16px 16px", "marginBottom": "2.5rem"}),
 
     # ── Filters ─────────────────────────────────────────────────────────────
     dbc.Row([
@@ -124,7 +135,7 @@ app.layout = dbc.Container([
                 clearable=False,
                 style={"borderRadius": "8px"},
             ),
-        ], md=4),
+        ], md=3),
         dbc.Col([
             html.Label("Nama Event", className="fw-semibold small text-muted mb-1"),
             dcc.Dropdown(
@@ -137,7 +148,31 @@ app.layout = dbc.Container([
                 clearable=False,
                 style={"borderRadius": "8px"},
             ),
-        ], md=8),
+        ], md=5),
+        dbc.Col([
+            html.Label("Wilayah", className="fw-semibold small text-muted mb-1"),
+            dcc.Dropdown(
+                id="dd-wilayah",
+                options=[{"label": "✦ Semua Wilayah", "value": "ALL"}] + [
+                    {"label": w, "value": w} for w in WILAYAH_ORDER
+                ],
+                value="ALL",
+                clearable=False,
+                style={"borderRadius": "8px"},
+            ),
+        ], md=2),
+        dbc.Col([
+            html.Label("Frekuensi Kehadiran", className="fw-semibold small text-muted mb-1"),
+            dcc.Dropdown(
+                id="dd-frekuensi",
+                options=[{"label": "✦ Semua", "value": "ALL"}] + [
+                    {"label": f, "value": f} for f in FREQ_ORDER
+                ],
+                value="ALL",
+                clearable=False,
+                style={"borderRadius": "8px"},
+            ),
+        ], md=2),
     ], className="mb-4 p-3 g-3",
        style={"background": "#f7fafd", "borderRadius": "10px",
               "boxShadow": "0 1px 4px rgba(0,0,0,0.05)"}),
@@ -165,6 +200,20 @@ app.layout = dbc.Container([
             html.Div(dcc.Graph(id="chart-kota", config={"displayModeBar": False}),
                      style=SECTION_STYLE),
             md=12,
+        ),
+    ], className="mb-4 g-3"),
+
+    # ── Row 1.7 : Wilayah + Frekuensi Kehadiran ────────────────────────────────
+    dbc.Row([
+        dbc.Col(
+            html.Div(dcc.Graph(id="chart-wilayah", config={"displayModeBar": False}),
+                     style=SECTION_STYLE),
+            md=5,
+        ),
+        dbc.Col(
+            html.Div(dcc.Graph(id="chart-frekuensi", config={"displayModeBar": False}),
+                     style=SECTION_STYLE),
+            md=7,
         ),
     ], className="mb-4 g-3"),
 
@@ -202,19 +251,31 @@ app.layout = dbc.Container([
             html.H6("Ringkasan per Event", className="fw-bold mb-3 text-secondary"),
             html.Div(id="table-summary"),
         ], style=SECTION_STYLE),
+    ), className="mb-4"),
+
+    # ── Peserta Activity Table ─────────────────────────────────────────────
+    dbc.Row(dbc.Col(
+        html.Div([
+            html.H6("Rekap Kehadiran Peserta", className="fw-bold mb-3 text-secondary"),
+            html.Div(id="table-peserta"),
+        ], style=SECTION_STYLE),
     ), className="mb-5"),
 
 ], fluid=True, style={"fontFamily": "Segoe UI, sans-serif",
-                       "padding": "0 20px", "backgroundColor": "#f0f6fd"})
+                       "padding": "0 20px 5px 20px", "backgroundColor": "#f0f6fd"})
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────
-def filter_df(kategori, event):
+def filter_df(kategori, event, wilayah="ALL", frekuensi="ALL"):
     df = df_raw.copy()
     if kategori != "ALL":
         df = df[df["Kategori"] == kategori]
     if event != "ALL":
         df = df[df["Event Label"] == event]
+    if wilayah != "ALL":
+        df = df[df["Wilayah"] == wilayah]
+    if frekuensi != "ALL":
+        df = df[df["Frekuensi Kehadiran"] == frekuensi]
     return df
 
 
@@ -237,9 +298,17 @@ def kpi_card(label, value, accent):
 @app.callback(
     Output("dd-event", "options"),
     Input("dd-kategori", "value"),
+    Input("dd-wilayah", "value"),
+    Input("dd-frekuensi", "value"),
 )
-def cascade_event(kategori):
-    df = df_raw if kategori == "ALL" else df_raw[df_raw["Kategori"] == kategori]
+def cascade_event(kategori, wilayah, frekuensi):
+    df = df_raw.copy()
+    if kategori != "ALL":
+        df = df[df["Kategori"] == kategori]
+    if wilayah != "ALL":
+        df = df[df["Wilayah"] == wilayah]
+    if frekuensi != "ALL":
+        df = df[df["Frekuensi Kehadiran"] == frekuensi]
     events = sorted(df["Event Label"].dropna().unique())
     return [{"label": "✦ Semua Event", "value": "ALL"}] + [
         {"label": e, "value": e} for e in events
@@ -256,30 +325,36 @@ def cascade_event(kategori):
     Output("chart-kota", "figure"),
     Output("chart-harapan", "figure"),
     Output("chart-keluhan", "figure"),
+    Output("chart-wilayah", "figure"),
+    Output("chart-frekuensi", "figure"),
     Output("table-summary", "children"),
+    Output("table-peserta", "children"),
     Input("dd-kategori", "value"),
     Input("dd-event", "value"),
+    Input("dd-wilayah", "value"),
+    Input("dd-frekuensi", "value"),
 )
-def update_all(kategori, event):
-    df = filter_df(kategori, event)
-    n = len(df)
+def update_all(kategori, event, wilayah, frekuensi):
+    df = filter_df(kategori, event, wilayah, frekuensi)
+    df_uniq = df.drop_duplicates(subset="Nama", keep="first")
+    n = df_uniq.shape[0]
 
     # ── KPI ──────────────────────────────────────────────────────────────
-    avg_age = df["Usia"].mean() if n else 0
-    pct_f = (df["Gender"] == "Female").sum() / n * 100 if n else 0
-    top_prov = df["Provinsi"].value_counts().idxmax() if n else "–"
+    avg_age = df_uniq["Usia"].mean() if n else 0
+    pct_f = (df_uniq["Gender"] == "Female").sum() / n * 100 if n else 0
+    top_prov = df_uniq["Wilayah"].value_counts().idxmax() if n else "-"
     n_events = df["Event Label"].nunique()
 
     kpis = [
-        kpi_card("Total Peserta",       str(n),              "#ADD3FA"),
+        kpi_card("Peserta Unik",        str(n),              "#ADD3FA"),
         kpi_card("Jumlah Event",        str(n_events),       "#B9EBFA"),
         kpi_card("Rata-rata Usia",      f"{avg_age:.1f} th", "#FAFAD5"),
         kpi_card("Proporsi Perempuan",  f"{pct_f:.0f}%",     "#FADFAA"),
-        kpi_card("Provinsi Terbanyak",  top_prov,            "#FAD4C8"),
+        kpi_card("Wilayah Terbanyak",   top_prov,            "#FAD4C8"),
     ]
 
     # ── Location ─────────────────────────────────────────────────────────
-    prov = df["Provinsi"].value_counts().reset_index()
+    prov = df_uniq["Provinsi"].value_counts().reset_index()
     prov.columns = ["Provinsi", "Peserta"]
     fig_loc = px.bar(
         prov, x="Peserta", y="Provinsi", orientation="h",
@@ -296,7 +371,7 @@ def update_all(kategori, event):
     )
 
     # ── Gender ───────────────────────────────────────────────────────────
-    gen = df["Gender"].value_counts()
+    gen = df_uniq["Gender"].value_counts()
     label_map = {"Female": "Perempuan", "Male": "Laki-laki"}
     gen.index = [label_map.get(i, i) for i in gen.index]
     fig_gen = go.Figure(go.Pie(
@@ -321,7 +396,7 @@ def update_all(kategori, event):
 
     # ── Age ──────────────────────────────────────────────────────────────
     age_order = ["≤12", "13-17", "18-25", "26-35", "36-45", "46-55", "56-65", "66+"]
-    age_c = (df["Kelompok Usia"]
+    age_c = (df_uniq["Kelompok Usia"]
              .value_counts()
              .reindex(age_order, fill_value=0)
              .reset_index())
@@ -342,7 +417,7 @@ def update_all(kategori, event):
     )
 
     # ── Profesi ──────────────────────────────────────────────────────────
-    prof = df["Kategori Profesi"].value_counts().reset_index()
+    prof = df_uniq["Kategori Profesi"].value_counts().reset_index()
     prof.columns = ["Profesi", "Peserta"]
     fig_prof = px.bar(
         prof, x="Peserta", y="Profesi", orientation="h",
@@ -359,7 +434,7 @@ def update_all(kategori, event):
     )
 
     # ── Kota ─────────────────────────────────────────────────────────────
-    kota = df["Kota"].value_counts().head(15).reset_index()
+    kota = df_uniq["Kota"].value_counts().head(15).reset_index()
     kota.columns = ["Kota", "Peserta"]
     fig_kota = px.bar(
         kota, x="Peserta", y="Kota", orientation="h",
@@ -377,7 +452,7 @@ def update_all(kategori, event):
 
     # ── Harapan ──────────────────────────────────────────────────────────
     h_all = []
-    for v in df["Topik Harapan"].dropna():
+    for v in df_uniq["Topik Harapan"].dropna():
         h_all.extend(parse_topics(v, KNOWN_HARAPAN))
     h_cnt = Counter(h_all)
     h_cnt.pop("Tidak Ada Respons", None)
@@ -398,7 +473,7 @@ def update_all(kategori, event):
 
     # ── Keluhan ──────────────────────────────────────────────────────────
     k_all = []
-    for v in df["Topik Keluhan"].dropna():
+    for v in df_uniq["Topik Keluhan"].dropna():
         k_all.extend(parse_topics(v, KNOWN_KELUHAN))
     k_cnt = Counter(k_all)
     for noise in ["Tidak Ada Respons", "Tidak Ada Keluhan"]:
@@ -426,6 +501,60 @@ def update_all(kategori, event):
                                x=0.5, y=0.5, showarrow=False,
                                font=dict(size=14, color="#aaa"))
 
+    # ── Wilayah ──────────────────────────────────────────────────────────
+    wil = (
+        df_uniq["Wilayah"]
+        .value_counts()
+        .reindex(WILAYAH_ORDER, fill_value=0)
+        .reset_index()
+    )
+    wil.columns = ["Wilayah", "Peserta"]
+    total_wil = wil["Peserta"].sum()
+
+    fig_wil = go.Figure(go.Pie(
+        labels=wil["Wilayah"],
+        values=wil["Peserta"],
+        hole=0.55,
+        marker_colors=["#ADD3FA", "#FAEFC3", "#FAD4C8", "#B9EBFA"],
+        textinfo="label+percent",
+        hovertemplate="%{label}: %{value} peserta (%{percent})<extra></extra>",
+        direction="clockwise",
+        sort=False,
+    ))
+    fig_wil.update_layout(
+        **CHART_LAYOUT,
+        title="Distribusi Wilayah",
+        showlegend=False,
+        annotations=[dict(
+            text=f"<b>{total_wil}</b><br><span style='font-size:11px;color:#888'>Peserta</span>",
+            x=0.5, y=0.5, font_size=16, showarrow=False,
+        )],
+    )
+
+    # ── Frekuensi Kehadiran ───────────────────────────────────────────────
+    freq_df = (
+        df_uniq["Frekuensi Kehadiran"]
+        .value_counts()
+        .reindex(FREQ_ORDER, fill_value=0)
+        .reset_index()
+    )
+    freq_df.columns = ["Frekuensi", "Peserta"]
+
+    fig_freq = go.Figure(go.Bar(
+        x=freq_df["Frekuensi"],
+        y=freq_df["Peserta"],
+        marker_color="#ADD3FA",
+        text=freq_df["Peserta"],
+        textposition="outside",
+    ))
+    fig_freq.update_layout(
+        **CHART_LAYOUT,
+        title="Frekuensi Kehadiran Peserta",
+        showlegend=False,
+        xaxis=dict(categoryorder="array", categoryarray=FREQ_ORDER, title=""),
+        yaxis=dict(title=""),
+    )
+
     # ── Table per event ──────────────────────────────────────────────────
     tbl = (
         df.groupby("Event Label", sort=False)
@@ -449,7 +578,7 @@ def update_all(kategori, event):
         data=tbl.to_dict("records"),
         columns=[{"name": c, "id": c} for c in tbl.columns],
         sort_action="native",
-        page_size=10,
+        page_size=8,
         style_table={"borderRadius": "8px", "overflow": "hidden",
                      "boxShadow": "0 1px 4px rgba(0,0,0,0.06)"},
         style_header={
@@ -473,7 +602,58 @@ def update_all(kategori, event):
         ],
     )
 
-    return kpis, fig_loc, fig_gen, fig_age, fig_prof, fig_kota, fig_har, fig_kel, table
+    # ── Rekap Kehadiran Peserta ─────────────────────────────────────────
+    peserta_tbl = (
+        df.groupby("Nama", sort=False)
+        .agg(
+            Domisili=("Kota", 'first'),
+            Profesi=("Kategori Profesi", 'first'),
+            Kategori_Terbanyak=("Kategori",   lambda x: x.value_counts().idxmax()),
+            Event_Terbanyak=("Nama Event",     lambda x: x.value_counts().idxmax()),
+            Total_Kehadiran=("Nama",           "count"),
+        )
+        .reset_index()
+        .sort_values("Total_Kehadiran", ascending=False)
+        .rename(columns={
+            "Nama":              "Nama Peserta",
+            "Domisili":          "Kota Domisili",
+            "Profesi":           "Kategori Profesi",
+            "Kategori_Terbanyak": "Kategori Terbanyak",
+            "Event_Terbanyak":   "Event Terbanyak",
+            "Total_Kehadiran":   "Total Kehadiran",
+        })
+    )
+
+    tbl_peserta = dash_table.DataTable(
+        data=peserta_tbl.to_dict("records"),
+        columns=[{"name": c, "id": c} for c in peserta_tbl.columns],
+        sort_action="native",
+        filter_action="native",
+        page_size=8,
+        style_table={"borderRadius": "8px", "overflow": "hidden",
+                     "boxShadow": "0 1px 4px rgba(0,0,0,0.06)"},
+        style_header={
+            "backgroundColor": "#B9EBFA",
+            "fontWeight": "bold",
+            "border": "none",
+            "padding": "10px 14px",
+            "fontSize": "13px",
+        },
+        style_cell={
+            "padding": "9px 14px",
+            "fontFamily": "Segoe UI, sans-serif",
+            "fontSize": "13px",
+            "border": "1px solid #eef2f7",
+            "textAlign": "left",
+            "whiteSpace": "normal",
+        },
+        style_data_conditional=[
+            {"if": {"row_index": "odd"}, "backgroundColor": "#f5faff"},
+            {"if": {"column_id": "Total Kehadiran"}, "fontWeight": "bold", "color": "#3a8fd9"},
+        ],
+    )
+
+    return kpis, fig_loc, fig_gen, fig_age, fig_prof, fig_kota, fig_har, fig_kel, fig_wil, fig_freq, table, tbl_peserta
 
 
 if __name__ == "__main__":
