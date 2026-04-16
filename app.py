@@ -609,7 +609,6 @@ def update_all(kategori, event, wilayah, frekuensi):
             Domisili=("Kota", 'first'),
             Profesi=("Kategori Profesi", 'first'),
             Kategori_Terbanyak=("Kategori",   lambda x: x.value_counts().idxmax()),
-            Event_Terbanyak=("Nama Event",     lambda x: x.value_counts().idxmax()),
             Total_Kehadiran=("Nama",           "count"),
         )
         .reset_index()
@@ -619,7 +618,6 @@ def update_all(kategori, event, wilayah, frekuensi):
             "Domisili":          "Kota Domisili",
             "Profesi":           "Kategori Profesi",
             "Kategori_Terbanyak": "Kategori Terbanyak",
-            "Event_Terbanyak":   "Event Terbanyak",
             "Total_Kehadiran":   "Total Kehadiran",
         })
     )
