@@ -25,11 +25,11 @@ df_raw["Event Label"] = df_raw.apply(
 _freq_map = df_raw["Nama"].value_counts()
 df_raw["_freq"] = df_raw["Nama"].map(_freq_map)
 df_raw["Frekuensi Kehadiran"] = df_raw["_freq"].apply(
-    lambda x: ">5 Kali" if x > 5 else ("2-5 Kali" if x >= 2 else "1 Kali")
+    lambda x: ">5 Kali" if x > 5 else (f"{x} Kali" if x >= 2 else "1 Kali")
 )
 df_raw = df_raw.drop(columns=["_freq"])
 
-FREQ_ORDER    = ["1 Kali", "2-5 Kali", ">5 Kali"]
+FREQ_ORDER    = ["1 Kali", "2 Kali", "3 Kali", "4 Kali", "5 Kali", ">5 Kali"]
 WILAYAH_ORDER = ["Jabodetabek", "Jawa Tengah", "Jawa Timur", "Bali"]
 
 # ── Palette ────────────────────────────────────────────────────────────────
@@ -40,6 +40,17 @@ PALETTE = [
 BLUE_SCALE  = ["#D4F0FF", "#ADD3FA", "#7AB8F0"]
 WARM_SCALE  = ["#FAFAD5", "#FAEFC3", "#FAD4C8"]
 PEACH_SCALE = ["#FAFAD5", "#FAD4C8", "#FADFAA"]
+
+# ── Styles ─────────────────────────────────────────────────────────────────
+CARD_STYLE = {"borderRadius": "10px", "boxShadow": "0 2px 8px rgba(0,0,0,0.07)"}
+SECTION_STYLE = {"background": "white", "borderRadius": "10px",
+                 "padding": "16px", "boxShadow": "0 2px 8px rgba(0,0,0,0.06)"}
+CHART_LAYOUT = dict(
+    paper_bgcolor="white",
+    plot_bgcolor="white",
+    font=dict(family="Segoe UI, sans-serif", size=12, color="#333"),
+    margin=dict(t=48, b=32, l=8, r=24),
+)
 
 # ── Known topic labels (handles "Anatomi, Gerak & Postur Tubuh" with comma) ─
 KNOWN_HARAPAN = [
@@ -98,16 +109,6 @@ app = Dash(
     title="Partnership & Event Report",
 )
 server = app.server
-
-CARD_STYLE = {"borderRadius": "10px", "boxShadow": "0 2px 8px rgba(0,0,0,0.07)"}
-SECTION_STYLE = {"background": "white", "borderRadius": "10px",
-                 "padding": "16px", "boxShadow": "0 2px 8px rgba(0,0,0,0.06)"}
-CHART_LAYOUT = dict(
-    paper_bgcolor="white",
-    plot_bgcolor="white",
-    font=dict(family="Segoe UI, sans-serif", size=12, color="#333"),
-    margin=dict(t=48, b=32, l=8, r=24),
-)
 
 app.layout = dbc.Container([
 
@@ -259,6 +260,21 @@ app.layout = dbc.Container([
             html.H6("Rekap Kehadiran Peserta", className="fw-bold mb-3 text-secondary"),
             html.Div(id="table-peserta"),
         ], style=SECTION_STYLE),
+    ), className="mb-4"),
+
+    # ── Riwayat Kehadiran per Peserta ─────────────────────────────────────────
+    dbc.Row(dbc.Col(
+        html.Div([
+            html.H6("Riwayat Kehadiran per Peserta", className="fw-bold mb-3 text-secondary"),
+            dcc.Dropdown(
+                id="dd-search-peserta",
+                options=[{"label": n, "value": n} for n in sorted(df_raw["Nama"].dropna().unique())],
+                placeholder="Cari nama peserta...",
+                clearable=True,
+                style={"borderRadius": "8px", "marginBottom": "12px"},
+            ),
+            html.Div(id="table-riwayat"),
+        ], style=SECTION_STYLE),
     ), className="mb-5"),
 
 ], fluid=True, style={"fontFamily": "Segoe UI, sans-serif",
@@ -314,7 +330,6 @@ def cascade_event(kategori, wilayah, frekuensi):
         {"label": e, "value": e} for e in events
     ]
 
-
 # ── Main callback ─────────────────────────────────────────────────────────
 @app.callback(
     Output("kpi-row", "children"),
@@ -332,7 +347,7 @@ def cascade_event(kategori, wilayah, frekuensi):
     Input("dd-kategori", "value"),
     Input("dd-event", "value"),
     Input("dd-wilayah", "value"),
-    Input("dd-frekuensi", "value"),
+    Input("dd-frekuensi", "value"),    
 )
 def update_all(kategori, event, wilayah, frekuensi):
     df = filter_df(kategori, event, wilayah, frekuensi)
@@ -346,7 +361,7 @@ def update_all(kategori, event, wilayah, frekuensi):
     n_events = df["Event Label"].nunique()
 
     kpis = [
-        kpi_card("Peserta Unik",        str(n),              "#ADD3FA"),
+        kpi_card("Peserta",        str(n),              "#ADD3FA"),
         kpi_card("Jumlah Event",        str(n_events),       "#B9EBFA"),
         kpi_card("Rata-rata Usia",      f"{avg_age:.1f} th", "#FAFAD5"),
         kpi_card("Proporsi Perempuan",  f"{pct_f:.0f}%",     "#FADFAA"),
@@ -509,6 +524,7 @@ def update_all(kategori, event, wilayah, frekuensi):
         .reset_index()
     )
     wil.columns = ["Wilayah", "Peserta"]
+    wil = wil[wil["Peserta"] > 0]
     total_wil = wil["Peserta"].sum()
 
     fig_wil = go.Figure(go.Pie(
@@ -627,7 +643,7 @@ def update_all(kategori, event, wilayah, frekuensi):
         columns=[{"name": c, "id": c} for c in peserta_tbl.columns],
         sort_action="native",
         filter_action="native",
-        page_size=8,
+        page_size=6,
         style_table={"borderRadius": "8px", "overflow": "hidden",
                      "boxShadow": "0 1px 4px rgba(0,0,0,0.06)"},
         style_header={
@@ -653,6 +669,29 @@ def update_all(kategori, event, wilayah, frekuensi):
 
     return kpis, fig_loc, fig_gen, fig_age, fig_prof, fig_kota, fig_har, fig_kel, fig_wil, fig_freq, table, tbl_peserta
 
+# ── Riwayat Kehadiran per Peserta ─────────────────────────────────────────
+@app.callback(
+    Output("table-riwayat", "children"),
+    Input("dd-search-peserta", "value"),
+)
+def show_riwayat(nama):
+    if not nama:
+        return html.P("Pilih nama peserta untuk melihat riwayat kehadiran.",
+                      className="text-muted small")
+    rows = df_raw[df_raw["Nama"] == nama][["Nama Event", "Lokasi Event", "Kategori"]].copy()
+    rows = rows.rename(columns={"Lokasi Event": "Lokasi"})
+    return dash_table.DataTable(
+        data=rows.to_dict("records"),
+        columns=[{"name": c, "id": c} for c in rows.columns],
+        style_table={"borderRadius": "8px", "overflow": "hidden"},
+        style_header={"backgroundColor": "#ADD3FA", "fontWeight": "bold",
+                      "border": "none", "padding": "10px 14px", "fontSize": "13px"},
+        style_cell={"padding": "9px 14px", "fontFamily": "Segoe UI, sans-serif",
+                    "fontSize": "13px", "border": "1px solid #eef2f7", "textAlign": "left"},
+        style_data_conditional=[
+            {"if": {"row_index": "odd"}, "backgroundColor": "#f5faff"},
+        ],
+    )
 
 if __name__ == "__main__":
     app.run(debug=True)
