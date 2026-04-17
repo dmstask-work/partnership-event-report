@@ -273,6 +273,18 @@ app.layout = dbc.Container([
                 clearable=True,
                 style={"borderRadius": "8px", "marginBottom": "12px"},
             ),
+            # html.Datalist(
+            #     id="peserta-datalist",
+            #     children=[html.Option(value=n) for n in sorted(df_raw["Nama"].dropna().unique())]
+            # ),
+            # dcc.Input(
+            #     id="dd-search-peserta",
+            #     type="text",
+            #     placeholder="Cari nama peserta...",
+            #     debounce=True,
+            #     list="peserta-datalist",
+            #     style={"borderRadius": "4px", "marginBottom": "12px", "width": "100%", "padding": "0px 12px"},
+            # ),
             html.Div(id="table-riwayat"),
         ], style=SECTION_STYLE),
     ), className="mb-5"),
@@ -576,7 +588,7 @@ def update_all(kategori, event, wilayah, frekuensi):
         df.groupby("Event Label", sort=False)
         .agg(
             Kategori=("Kategori", "first"),
-            Peserta=("Nama", "count"),
+            Peserta=("Nama", "nunique"),
             Perempuan=("Gender", lambda x: (x == "Female").sum()),
             Laki_laki=("Gender", lambda x: (x == "Male").sum()),
             Rata_usia=("Usia", lambda x: round(x.mean(), 1)),
@@ -625,6 +637,7 @@ def update_all(kategori, event, wilayah, frekuensi):
             Domisili=("Kota", 'first'),
             Profesi=("Kategori Profesi", 'first'),
             Kategori_Terbanyak=("Kategori",   lambda x: x.value_counts().idxmax()),
+            No_telp=("No WhatsApp", 'first'),
             Total_Kehadiran=("Nama",           "count"),
         )
         .reset_index()
@@ -634,6 +647,7 @@ def update_all(kategori, event, wilayah, frekuensi):
             "Domisili":          "Kota Domisili",
             "Profesi":           "Kategori Profesi",
             "Kategori_Terbanyak": "Kategori Terbanyak",
+            "No_telp":           "No WhatsApp",
             "Total_Kehadiran":   "Total Kehadiran",
         })
     )
@@ -679,6 +693,7 @@ def show_riwayat(nama):
         return html.P("Pilih nama peserta untuk melihat riwayat kehadiran.",
                       className="text-muted small")
     rows = df_raw[df_raw["Nama"] == nama][["Nama Event", "Lokasi Event", "Kategori"]].copy()
+    # rows = df_raw[df_raw["Nama"].str.contains(nama, case=False, na=False)][["Nama Event", "Lokasi Event", "Kategori"]].copy()
     rows = rows.rename(columns={"Lokasi Event": "Lokasi"})
     return dash_table.DataTable(
         data=rows.to_dict("records"),
