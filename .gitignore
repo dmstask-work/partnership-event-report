@@ -1,0 +1,9 @@
+# Notebooks & temp files
+test.ipynb
+requirements.txt
+__pycache__/
+*.pyc
+
+# Expanded/intermediate data files
+data_clean/data_new_expanded.xlsx
+data_clean/data_new_ready.xlsx
