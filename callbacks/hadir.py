@@ -148,7 +148,7 @@ def update_all(kategori, event, wilayah, frekuensi):
     kota.columns = ["Kota", "Peserta"]
     fig_kota = px.bar(
         kota, x="Peserta", y="Kota", orientation="h",
-        title="Top 15 Kota Asal Peserta",
+        title="Distribusi Kota Asal Peserta",
         color="Peserta", color_continuous_scale=BLUE_SCALE, text="Peserta",
     )
     fig_kota.update_traces(textposition="outside", marker_line_width=0)

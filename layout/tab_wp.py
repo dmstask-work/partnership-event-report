@@ -4,6 +4,13 @@ import dash_bootstrap_components as dbc
 from config import SECTION_STYLE
 from data import df_wp_raw
 
+_NAV_BTN = {
+    "background": "none", "border": "none",
+    "fontSize": "15px", "cursor": "pointer",
+    "color": "#2d7dd6", "padding": "2px 6px",
+    "lineHeight": "1",
+}
+
 
 def build_tab_wp():
     return dbc.Tab(
@@ -98,12 +105,27 @@ def build_tab_wp():
                              style=SECTION_STYLE), md=4),
             ], className="mb-4 g-3"),
 
+            # page state for provinsi pagination
+            dcc.Store(id="wp-prov-page", data=0),
+
             # ── Row 2: Provinsi + Country ─────────────────────────────────
             dbc.Row([
                 dbc.Col(
-                    html.Div(dcc.Graph(id="wp-chart-provinsi",
-                                      config={"displayModeBar": False}),
-                             style=SECTION_STYLE), md=7),
+                    html.Div([
+                        dcc.Graph(id="wp-chart-provinsi",
+                                  config={"displayModeBar": False}),
+                        # pagination nav
+                        html.Div([
+                            html.Button("«", id="wp-prov-first",  n_clicks=0, style=_NAV_BTN),
+                            html.Button("‹", id="wp-prov-prev",   n_clicks=0, style=_NAV_BTN),
+                            html.Span(id="wp-prov-label",
+                                      style={"fontSize": "13px", "color": "#555",
+                                             "margin": "0 6px", "minWidth": "50px",
+                                             "textAlign": "center", "display": "inline-block"}),
+                            html.Button("›", id="wp-prov-next",   n_clicks=0, style=_NAV_BTN),
+                            html.Button("»", id="wp-prov-last",   n_clicks=0, style=_NAV_BTN),
+                        ], style={"textAlign": "center", "paddingBottom": "6px"}),
+                    ], style=SECTION_STYLE), md=7),
                 dbc.Col(
                     html.Div(dcc.Graph(id="wp-chart-country",
                                       config={"displayModeBar": False}),

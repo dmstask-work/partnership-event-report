@@ -1,6 +1,6 @@
 import plotly.express as px
 import plotly.graph_objects as go
-from dash import Input, Output, dash_table, html
+from dash import Input, Output, State, ctx, dash_table, html
 
 from dash_instance import app
 from config import BLUE_SCALE, WARM_SCALE, CHART_LAYOUT
@@ -11,7 +11,6 @@ from utils import filter_wp, kpi_card
     Output("wp-kpi-row",         "children"),
     Output("wp-chart-sesi",      "figure"),
     Output("wp-chart-gender",    "figure"),
-    Output("wp-chart-provinsi",  "figure"),
     Output("wp-chart-country",   "figure"),
     Output("wp-chart-district",  "figure"),
     Output("wp-chart-frekuensi", "figure"),
@@ -34,7 +33,7 @@ def update_wp(sesi, provinsi, country):
     if df.empty:
         empty_tbl = html.P("Data tidak tersedia.", className="text-muted small")
         return ([], _empty("Top Sesi"), _empty("Gender"),
-                _empty("Provinsi"), _empty("Negara"),
+                _empty("Negara"),
                 _empty("Distrik"), _empty("Frekuensi Kehadiran Peserta"),
                 empty_tbl, empty_tbl)
 
@@ -88,22 +87,6 @@ def update_wp(sesi, provinsi, country):
             x=0.5, y=0.5, font_size=16, showarrow=False,
         )],
     )
-
-    # ── Provinsi ─────────────────────────────────────────────────────────
-    prov_s  = df[df["Provinsi"].apply(
-        lambda x: isinstance(x, str) and x not in ("-", "nan")
-    )]["Provinsi"]
-    prov_df = prov_s.value_counts().reset_index()
-    prov_df.columns = ["Provinsi", "Entri"]
-    fig_prov = px.bar(
-        prov_df, x="Entri", y="Provinsi", orientation="h",
-        title="Distribusi Provinsi",
-        color="Entri", color_continuous_scale=BLUE_SCALE, text="Entri",
-    )
-    fig_prov.update_traces(textposition="outside", marker_line_width=0)
-    fig_prov.update_layout(**CHART_LAYOUT, coloraxis_showscale=False,
-                           yaxis=dict(categoryorder="total ascending", title=""),
-                           xaxis=dict(title=""))
 
     # ── Country ──────────────────────────────────────────────────────────
     ctry_s  = df[df["Country"].apply(
@@ -248,8 +231,108 @@ def update_wp(sesi, provinsi, country):
              "color": "#3a8fd9"},
         ],
     )
-    return (kpis, fig_sesi, fig_gen, fig_prov, fig_ctry, fig_dist,
+    return (kpis, fig_sesi, fig_gen, fig_ctry, fig_dist,
             fig_freq_wp, summary_table, wp_table)
+
+
+# ── Helpers for provinsi pagination ──────────────────────────────────────────
+_PROV_PAGE_SIZE = 8
+
+
+def _get_prov_df(df):
+    prov_s = df[df["Provinsi"].apply(
+        lambda x: isinstance(x, str) and x not in ("-", "nan")
+    )]["Provinsi"]
+    prov_df = prov_s.value_counts().reset_index()
+    prov_df.columns = ["Provinsi", "Entri"]
+    return prov_df.sort_values("Entri", ascending=True).reset_index(drop=True)
+
+
+def _get_prov_pages(prov_df):
+    total, pages = len(prov_df), []
+    for i in range(total, 0, -_PROV_PAGE_SIZE):
+        pages.append(prov_df.iloc[max(i - _PROV_PAGE_SIZE, 0):i])
+    return pages
+
+
+def _build_prov_fig(prov_df, page_idx):
+    pages = _get_prov_pages(prov_df)
+    if not pages:
+        fig = go.Figure()
+        fig.update_layout(**CHART_LAYOUT, title="Distribusi Provinsi")
+        fig.add_annotation(text="Data tidak tersedia", x=0.5, y=0.5,
+                           showarrow=False, font=dict(size=14, color="#aaa"))
+        return fig
+    page_idx  = max(0, min(page_idx, len(pages) - 1))
+    page      = pages[page_idx]
+    global_max = prov_df["Entri"].max()
+    x_max     = page["Entri"].max() * 1.25
+    fig = go.Figure(go.Bar(
+        x=page["Entri"], y=page["Provinsi"],
+        orientation="h",
+        text=page["Entri"], textposition="outside",
+        marker=dict(
+            color=page["Entri"],
+            colorscale=BLUE_SCALE,
+            cmin=0, cmax=global_max,
+            line_width=0,
+        ),
+    ))
+    fig.update_layout(
+        **CHART_LAYOUT,
+        title="Distribusi Provinsi",
+        yaxis=dict(title="", categoryorder="array",
+                   categoryarray=page["Provinsi"].tolist()),
+        xaxis=dict(title="", range=[0, x_max]),
+    )
+    fig.update_layout(margin=dict(t=48, b=16, l=8, r=24))
+    return fig
+
+
+@app.callback(
+    Output("wp-prov-page",      "data"),
+    Output("wp-chart-provinsi", "figure"),
+    Output("wp-prov-label",     "children"),
+    Input("wp-prov-first",  "n_clicks"),
+    Input("wp-prov-prev",   "n_clicks"),
+    Input("wp-prov-next",   "n_clicks"),
+    Input("wp-prov-last",   "n_clicks"),
+    Input("wp-dd-sesi",     "value"),
+    Input("wp-dd-provinsi", "value"),
+    Input("wp-dd-country",  "value"),
+    State("wp-prov-page",   "data"),
+)
+def update_prov_page(n_first, n_prev, n_next, n_last,
+                     sesi, provinsi, country, cur_page):
+    df      = filter_wp(sesi, provinsi, country)
+    prov_df = _get_prov_df(df)
+    pages   = _get_prov_pages(prov_df)
+    n_pages = len(pages)
+
+    if n_pages == 0:
+        fig = go.Figure()
+        fig.update_layout(**CHART_LAYOUT, title="Distribusi Provinsi")
+        fig.add_annotation(text="Data tidak tersedia", x=0.5, y=0.5,
+                           showarrow=False, font=dict(size=14, color="#aaa"))
+        return 0, fig, "0 / 0"
+
+    triggered = ctx.triggered_id
+    cur       = cur_page or 0
+    if triggered in ("wp-dd-sesi", "wp-dd-provinsi", "wp-dd-country", None):
+        new_page = 0
+    elif triggered == "wp-prov-first":
+        new_page = 0
+    elif triggered == "wp-prov-prev":
+        new_page = max(0, cur - 1)
+    elif triggered == "wp-prov-next":
+        new_page = min(n_pages - 1, cur + 1)
+    elif triggered == "wp-prov-last":
+        new_page = n_pages - 1
+    else:
+        new_page = cur
+
+    new_page = max(0, min(new_page, n_pages - 1))
+    return new_page, _build_prov_fig(prov_df, new_page), f"{new_page + 1} / {n_pages}"
 
 
 @app.callback(
