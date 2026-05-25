@@ -1,10 +1,3 @@
-import os
-
-# ── Paths ──────────────────────────────────────────────────────────────────
-BASE_DIR  = os.path.dirname(os.path.abspath(__file__))
-DATA_PATH = os.path.join(BASE_DIR, "data_clean", "data_merged.xlsx")
-WP_PATH   = os.path.join(BASE_DIR, "data_clean", "output_wp.xlsx")
-
 # ── Ordering ───────────────────────────────────────────────────────────────
 FREQ_ORDER    = ["1 Kali", "2 Kali", "3 Kali", "4 Kali", "5 Kali", ">5 Kali"]
 WILAYAH_ORDER = ["Jabodetabek", "Jawa Tengah", "Jawa Timur", "Bali"]
