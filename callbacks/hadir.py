@@ -1,9 +1,10 @@
 from collections import Counter
+from datetime import date
 
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from dash import Input, Output, dash_table, html
+from dash import Input, Output, State, dash_table, dcc, html
 
 from dash_instance import app
 from config import (
@@ -36,18 +37,19 @@ def cascade_event(kategori, wilayah, frekuensi):
 
 
 @app.callback(
-    Output("kpi-row",         "children"),
-    Output("chart-location",  "figure"),
-    Output("chart-gender",    "figure"),
-    Output("chart-age",       "figure"),
-    Output("chart-profesi",   "figure"),
-    Output("chart-kota",      "figure"),
-    Output("chart-harapan",   "figure"),
-    Output("chart-keluhan",   "figure"),
-    Output("chart-wilayah",   "figure"),
-    Output("chart-frekuensi", "figure"),
-    Output("table-summary",   "children"),
-    Output("table-peserta",   "children"),
+    Output("kpi-row",              "children"),
+    Output("chart-location",       "figure"),
+    Output("chart-gender",         "figure"),
+    Output("chart-age",            "figure"),
+    Output("chart-profesi",        "figure"),
+    Output("chart-kota",           "figure"),
+    Output("chart-harapan",        "figure"),
+    Output("chart-keluhan",        "figure"),
+    Output("chart-wilayah",        "figure"),
+    Output("chart-frekuensi",      "figure"),
+    Output("table-summary",        "children"),
+    Output("table-peserta",        "children"),
+    Output("store-rekap-peserta",  "data"),
     Input("dd-kategori",  "value"),
     Input("dd-event",     "value"),
     Input("dd-wilayah",   "value"),
@@ -327,7 +329,8 @@ def update_all(kategori, event, wilayah, frekuensi):
     )
 
     return (kpis, fig_loc, fig_gen, fig_age, fig_prof, fig_kota,
-            fig_har, fig_kel, fig_wil, fig_freq, table, tbl_peserta)
+            fig_har, fig_kel, fig_wil, fig_freq, table, tbl_peserta,
+            peserta_tbl.to_dict("records"))
 
 
 @app.callback(
@@ -356,3 +359,18 @@ def show_riwayat(nama):
             {"if": {"row_index": "odd"}, "backgroundColor": "#f5faff"},
         ],
     )
+
+
+# ── Download Rekap Kehadiran Peserta ──────────────────────────────────────────
+@app.callback(
+    Output("download-rekap-peserta", "data"),
+    Input("btn-download-rekap", "n_clicks"),
+    State("store-rekap-peserta", "data"),
+    prevent_initial_call=True,
+)
+def download_rekap_peserta(n_clicks, stored_data):
+    if not stored_data:
+        return None
+    df_export = pd.DataFrame(stored_data)
+    filename = f"Rekap_Peserta_Hadir_{date.today().strftime('%Y-%m-%d')}.xlsx"
+    return dcc.send_data_frame(df_export.to_excel, filename, index=False)

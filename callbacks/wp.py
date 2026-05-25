@@ -1,6 +1,9 @@
+from datetime import date
+
+import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from dash import Input, Output, State, ctx, dash_table, html
+from dash import Input, Output, State, ctx, dash_table, dcc, html
 
 from dash_instance import app
 from config import BLUE_SCALE, WARM_SCALE, CHART_LAYOUT
@@ -16,6 +19,7 @@ from utils import filter_wp, kpi_card
     Output("wp-chart-frekuensi", "figure"),
     Output("wp-table-summary",   "children"),
     Output("wp-table-peserta",   "children"),
+    Output("store-rekap-wp",     "data"),
     Input("wp-dd-sesi",     "value"),
     Input("wp-dd-provinsi", "value"),
     Input("wp-dd-country",  "value"),
@@ -35,7 +39,7 @@ def update_wp(sesi, provinsi, country):
         return ([], _empty("Top Sesi"), _empty("Gender"),
                 _empty("Negara"),
                 _empty("Distrik"), _empty("Frekuensi Kehadiran Peserta"),
-                empty_tbl, empty_tbl)
+                empty_tbl, empty_tbl, [])
 
     n_entries = len(df)
     n_peserta = df["Nama"].nunique()
@@ -232,7 +236,8 @@ def update_wp(sesi, provinsi, country):
         ],
     )
     return (kpis, fig_sesi, fig_gen, fig_ctry, fig_dist,
-            fig_freq_wp, summary_table, wp_table)
+            fig_freq_wp, summary_table, wp_table,
+            tbl_wp.to_dict("records"))
 
 
 # ── Helpers for provinsi pagination ──────────────────────────────────────────
@@ -362,3 +367,18 @@ def wp_show_riwayat(nama):
             {"if": {"row_index": "odd"}, "backgroundColor": "#f5faff"},
         ],
     )
+
+
+# ── Download Rekap Peserta WP ─────────────────────────────────────────────────
+@app.callback(
+    Output("download-rekap-wp", "data"),
+    Input("btn-download-rekap-wp", "n_clicks"),
+    State("store-rekap-wp", "data"),
+    prevent_initial_call=True,
+)
+def download_rekap_wp(n_clicks, stored_data):
+    if not stored_data:
+        return None
+    df_export = pd.DataFrame(stored_data)
+    filename = f"Rekap_Peserta_WP_{date.today().strftime('%Y-%m-%d')}.xlsx"
+    return dcc.send_data_frame(df_export.to_excel, filename, index=False)

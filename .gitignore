@@ -2,7 +2,6 @@
 __pycache__/
 *.pyc
 manage_users.py
-requirements.txt
 
 # Expanded/intermediate data files
 data_clean/

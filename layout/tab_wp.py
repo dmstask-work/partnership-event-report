@@ -14,7 +14,7 @@ _NAV_BTN = {
 
 def build_tab_wp():
     return dbc.Tab(
-        label="📋 WP Report",
+        label="WP Report",
         tab_id="tab-wp",
         label_style={
             "fontWeight": "600",
@@ -154,10 +154,20 @@ def build_tab_wp():
             ), className="mb-4"),
 
             # ── Rekap Peserta WP ──────────────────────────────────────────
+            dcc.Download(id="download-rekap-wp"),
+            dcc.Store(id="store-rekap-wp"),
             dbc.Row(dbc.Col(
                 html.Div([
-                    html.H6("Rekap Peserta WP",
-                            className="fw-bold mb-3 text-secondary"),
+                    html.Div([
+                        html.H6("Rekap Peserta WP",
+                                className="fw-bold mb-0 text-secondary"),
+                        dbc.Button(
+                            [html.Span("", className="me-1"), "Download Excel"],
+                            id="btn-download-rekap-wp",
+                            color="success", outline=True, size="sm",
+                            style={"borderRadius": "8px"},
+                        ),
+                    ], className="d-flex justify-content-between align-items-center mb-3"),
                     html.Div(id="wp-table-peserta"),
                 ], style=SECTION_STYLE),
             ), className="mb-4"),

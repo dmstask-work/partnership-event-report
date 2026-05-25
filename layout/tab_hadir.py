@@ -6,7 +6,7 @@ from data import df_raw
 
 def build_tab_hadir():
     return dbc.Tab(
-        label="📋 Hadir Report",
+        label="Hadir Report",
         tab_id="tab-hdr",
         label_style={
             "fontWeight": "600",
@@ -150,10 +150,20 @@ def build_tab_hadir():
             ), className="mb-4"),
 
             # ── Rekap Kehadiran Peserta ───────────────────────────────────
+            dcc.Download(id="download-rekap-peserta"),
+            dcc.Store(id="store-rekap-peserta"),
             dbc.Row(dbc.Col(
                 html.Div([
-                    html.H6("Rekap Kehadiran Peserta",
-                            className="fw-bold mb-3 text-secondary"),
+                    html.Div([
+                        html.H6("Rekap Kehadiran Peserta",
+                                className="fw-bold mb-0 text-secondary"),
+                        dbc.Button(
+                            [html.Span("", className="me-1"), "Download Excel"],
+                            id="btn-download-rekap",
+                            color="success", outline=True, size="sm",
+                            style={"borderRadius": "8px"},
+                        ),
+                    ], className="d-flex justify-content-between align-items-center mb-3"),
                     html.Div(id="table-peserta"),
                 ], style=SECTION_STYLE),
             ), className="mb-4"),
