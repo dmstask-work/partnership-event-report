@@ -2,7 +2,7 @@ from dash import dcc, html
 import dash_bootstrap_components as dbc
 
 from config import SECTION_STYLE
-from data import df_wp_raw
+from data import load_wp_df
 
 _NAV_BTN = {
     "background": "none", "border": "none",
@@ -13,6 +13,8 @@ _NAV_BTN = {
 
 
 def build_tab_wp():
+    # Fresh DB query on every page load so dropdowns reflect current data.
+    df_wp_raw = load_wp_df()
     return dbc.Tab(
         label="WP Report",
         tab_id="tab-wp",

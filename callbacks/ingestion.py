@@ -21,6 +21,7 @@ Environment variable required:
 import base64
 import io
 import os
+import time
 
 import numpy  as np
 import pandas as pd
@@ -915,6 +916,7 @@ def preview_uploaded_file(contents, filename, data_type):
 @app.callback(
     Output("ingestion-alert-container", "children",  allow_duplicate=True),
     Output("ingestion-sync-btn",        "disabled",  allow_duplicate=True),
+    Output("data-refresh-ts",           "data",      allow_duplicate=True),
     Input("ingestion-sync-btn",         "n_clicks"),
     State("ingestion-preview-table",    "data"),
     State("ingestion-preview-table",    "columns"),
@@ -931,7 +933,7 @@ def sync_to_supabase(n_clicks, table_data, table_columns, data_type):
     an automatic rollback so no partial data is committed.
     """
     if not n_clicks or not table_data:
-        return no_update, no_update
+        return no_update, no_update, no_update
 
     target_table = "hadir_data" if data_type == "hadir" else "wp_data"
     int_cols     = _HADIR_INT_COLS if data_type == "hadir" else _WP_INT_COLS
@@ -948,6 +950,7 @@ def sync_to_supabase(n_clicks, table_data, table_columns, data_type):
             return (
                 dbc.Alert("Tidak ada data untuk disinkronisasi.", color="warning", dismissable=True),
                 False,
+                no_update,
             )
 
         # Re-coerce: DataTable serialises everything to str after user edits
@@ -993,6 +996,7 @@ def sync_to_supabase(n_clicks, table_data, table_columns, data_type):
                 duration=10_000,
             ),
             True,
+            time.time(),
         )
 
     except EnvironmentError as env_err:
@@ -1002,6 +1006,7 @@ def sync_to_supabase(n_clicks, table_data, table_columns, data_type):
                 color="danger", dismissable=True,
             ),
             False,
+            no_update,
         )
 
     except Exception as exc:
@@ -1019,4 +1024,5 @@ def sync_to_supabase(n_clicks, table_data, table_columns, data_type):
                 color="danger", dismissable=True,
             ),
             False,
+            no_update,
         )

@@ -1,3 +1,4 @@
+import io
 from collections import Counter
 from datetime import date
 
@@ -5,6 +6,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from dash import Input, Output, State, dash_table, dcc, html
+from dash.exceptions import PreventUpdate
 
 from dash_instance import app
 from config import (
@@ -12,8 +14,21 @@ from config import (
     BLUE_SCALE, WARM_SCALE, PEACH_SCALE,
     CHART_LAYOUT, KNOWN_HARAPAN, KNOWN_KELUHAN,
 )
-from data import df_raw
+from data import load_hadir_df
 from utils import filter_df, kpi_card, parse_topics
+
+
+# ── Cache loader ─────────────────────────────────────────────────────────────
+# Fires on page load (data-refresh-ts == 0) and after every CRUD/upload
+# success (incremented counter).  Stores the full hadir DataFrame as JSON
+# so report callbacks never hit the DB directly.
+@app.callback(
+    Output("hadir-data-cache", "data"),
+    Input("data-refresh-ts", "data"),
+)
+def load_hadir_cache(_ts):
+    df = load_hadir_df()
+    return df.to_json(date_format="iso", orient="split")
 
 
 @app.callback(
@@ -21,9 +36,12 @@ from utils import filter_df, kpi_card, parse_topics
     Input("dd-kategori", "value"),
     Input("dd-wilayah", "value"),
     Input("dd-frekuensi", "value"),
+    Input("hadir-data-cache", "data"),
 )
-def cascade_event(kategori, wilayah, frekuensi):
-    df = df_raw.copy()
+def cascade_event(kategori, wilayah, frekuensi, hadir_json):
+    if not hadir_json:
+        return [{"label": "✦ Semua Event", "value": "ALL"}]
+    df = pd.read_json(io.StringIO(hadir_json), orient="split")
     if kategori != "ALL":
         df = df[df["Kategori"] == kategori]
     if wilayah != "ALL":
@@ -54,9 +72,13 @@ def cascade_event(kategori, wilayah, frekuensi):
     Input("dd-event",     "value"),
     Input("dd-wilayah",   "value"),
     Input("dd-frekuensi", "value"),
+    Input("hadir-data-cache", "data"),
 )
-def update_all(kategori, event, wilayah, frekuensi):
-    df      = filter_df(kategori, event, wilayah, frekuensi)
+def update_all(kategori, event, wilayah, frekuensi, hadir_json):
+    if not hadir_json:
+        raise PreventUpdate
+    df_full = pd.read_json(io.StringIO(hadir_json), orient="split")
+    df      = filter_df(df_full, kategori, event, wilayah, frekuensi)
     df_uniq = df.drop_duplicates(subset="Nama", keep="first")
     n       = df_uniq.shape[0]
 
@@ -334,15 +356,32 @@ def update_all(kategori, event, wilayah, frekuensi):
 
 
 @app.callback(
+    Output("dd-search-peserta", "options"),
+    Input("hadir-data-cache", "data"),
+)
+def update_search_peserta_options(hadir_json):
+    if not hadir_json:
+        return []
+    df = pd.read_json(io.StringIO(hadir_json), orient="split")
+    names = sorted(df["Nama"].dropna().unique())
+    return [{"label": n, "value": n} for n in names]
+
+
+@app.callback(
     Output("table-riwayat", "children"),
     Input("dd-search-peserta", "value"),
+    State("hadir-data-cache", "data"),
 )
-def show_riwayat(nama):
+def show_riwayat(nama, hadir_json):
     if not nama:
         return html.P("Pilih nama peserta untuk melihat riwayat kehadiran.",
                       className="text-muted small")
+    if not hadir_json:
+        return html.P("Data belum dimuat. Silakan tunggu sebentar.",
+                      className="text-muted small")
+    df = pd.read_json(io.StringIO(hadir_json), orient="split")
     rows = (
-        df_raw[df_raw["Nama"] == nama][["Nama Event", "Lokasi Event", "Kategori"]]
+        df[df["Nama"] == nama][["Nama Event", "Lokasi Event", "Kategori"]]
         .copy()
         .rename(columns={"Lokasi Event": "Lokasi"})
     )

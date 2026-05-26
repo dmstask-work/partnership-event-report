@@ -1,7 +1,7 @@
+import pandas as pd
 import dash_bootstrap_components as dbc
 from dash import html
 from config import CARD_STYLE
-from data import df_raw, df_wp_raw
 
 
 def parse_topics(text, known):
@@ -28,8 +28,12 @@ def parse_topics(text, known):
     return found
 
 
-def filter_df(kategori, event, wilayah="ALL", frekuensi="ALL"):
-    df = df_raw.copy()
+def filter_df(df: pd.DataFrame, kategori, event, wilayah="ALL", frekuensi="ALL") -> pd.DataFrame:
+    """
+    Filter the hadir DataFrame by the given dimension values.
+    Receives the DataFrame explicitly — no global state used.
+    """
+    df = df.copy()
     if kategori != "ALL":
         df = df[df["Kategori"] == kategori]
     if event != "ALL":
@@ -41,10 +45,14 @@ def filter_df(kategori, event, wilayah="ALL", frekuensi="ALL"):
     return df
 
 
-def filter_wp(sesi, provinsi, country):
-    if df_wp_raw.empty:
-        return df_wp_raw
-    df = df_wp_raw.copy()
+def filter_wp(df: pd.DataFrame, sesi, provinsi, country) -> pd.DataFrame:
+    """
+    Filter the wp DataFrame by the given dimension values.
+    Receives the DataFrame explicitly — no global state used.
+    """
+    if df.empty:
+        return df
+    df = df.copy()
     if sesi != "ALL":
         df = df[df["Nama Event"] == sesi]
     if provinsi != "ALL":

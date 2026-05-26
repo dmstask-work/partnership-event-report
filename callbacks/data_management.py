@@ -15,6 +15,7 @@ Security notes
 
 from __future__ import annotations
 
+import time
 import pandas as pd
 from dash import Input, Output, State, no_update
 from dash.exceptions import PreventUpdate
@@ -142,7 +143,8 @@ def search_update(_, keyword, table_name):
 
 
 @app.callback(
-    Output("update-alert", "children", allow_duplicate=True),
+    Output("update-alert",      "children",  allow_duplicate=True),
+    Output("data-refresh-ts",   "data",      allow_duplicate=True),
     Input("update-save-btn",       "n_clicks"),
     State("update-data-table",     "data"),
     State("update-original-store", "data"),
@@ -159,7 +161,7 @@ def save_updates(_, current_data, original_data, table_name):
     if auth.get_current_user_role() != "admin":
         raise PreventUpdate
     if not current_data:
-        return _alert("Tidak ada data untuk disimpan.", "warning")
+        return _alert("Tidak ada data untuk disimpan.", "warning"), no_update
 
     allowed_cols = _EDITABLE_COLS.get(table_name, set())
     original_map = {row["id"]: row for row in (original_data or [])}
@@ -201,11 +203,11 @@ def save_updates(_, current_data, original_data, table_name):
         return _alert(
             f"⚠️ {updated} baris diupdate, {len(errors)} baris gagal. {detail}",
             "warning",
-        )
+        ), no_update
     if updated == 0:
-        return _alert("ℹ️ Tidak ada perubahan yang terdeteksi.", "info")
+        return _alert("\u2139\ufe0f Tidak ada perubahan yang terdeteksi.", "info"), no_update
 
-    return _alert(f"✅ {updated} baris berhasil diupdate ke {table_name}.", "success")
+    return _alert(f"\u2705 {updated} baris berhasil diupdate ke {table_name}.", "success"), time.time()
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -254,6 +256,7 @@ def search_delete(_, keyword, table_name):
     Output("delete-data-table", "data",          allow_duplicate=True),
     Output("delete-data-table", "selected_rows", allow_duplicate=True),
     Output("delete-alert",      "children",      allow_duplicate=True),
+    Output("data-refresh-ts",   "data",          allow_duplicate=True),
     Input("delete-btn",                "n_clicks"),
     State("delete-data-table", "selected_row_ids"),   # actual DB id values
     State("delete-target-table",       "value"),
@@ -271,7 +274,8 @@ def delete_selected(_, selected_ids, table_name):
         raise PreventUpdate
     if not selected_ids:
         return (no_update, no_update,
-                _alert("Pilih minimal satu baris untuk dihapus.", "warning"))
+                _alert("Pilih minimal satu baris untuk dihapus.", "warning"),
+                no_update)
 
     try:
         _validate_table(table_name)
@@ -288,11 +292,13 @@ def delete_selected(_, selected_ids, table_name):
 
     except Exception as exc:
         return (no_update, no_update,
-                _alert(f"Gagal menghapus data: {exc}", "danger"))
+                _alert(f"Gagal menghapus data: {exc}", "danger"),
+                no_update)
 
     count = len(selected_ids)
     return (
         [],   # clear the table
         [],   # clear selection state
-        _alert(f"🗑️ {count} baris berhasil dihapus dari {table_name}.", "success"),
+        _alert(f"\U0001f5d1\ufe0f {count} baris berhasil dihapus dari {table_name}.", "success"),
+        time.time(),
     )

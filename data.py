@@ -48,46 +48,74 @@ _WP_REVERSE = {
 _HADIR_DISPLAY_COLS = list(_HADIR_REVERSE.values())
 _WP_DISPLAY_COLS    = list(_WP_REVERSE.values())
 
-try:
-    _eng = _get_engine()
-    df_raw = pd.read_sql(
-        "SELECT email, nama, no_whatsapp, kota_provinsi, tempat_kegiatan, "
-        "tanggal, sesi, jumlah_sesi, tahun, bulan, kategori, nama_event, "
-        "lokasi_event, gender, kota, provinsi, usia, kelompok_usia, "
-        "profesi_asli, kategori_profesi, harapan_asli, topik_harapan, "
-        "keluhan_asli, topik_keluhan, wilayah, workshop_yang_diikuti "
-        "FROM hadir_data",
-        _eng,
-    ).rename(columns=_HADIR_REVERSE)
+# ── On-demand data loaders ────────────────────────────────────────────────
+# These functions are called by the Dash cache-loading callbacks (not at
+# module import time), so every call returns a fresh snapshot from Supabase.
+# This ensures CRUD changes are reflected immediately after the next
+# data-refresh-ts increment.
 
-    df_wp_raw = pd.read_sql(
-        "SELECT email, nama, no_whatsapp, kota_provinsi, tempat_kegiatan, "
-        "tanggal, sesi, jumlah_sesi, tahun, bulan, kategori, nama_event, "
-        "lokasi_event, gender, kota, provinsi, district, country "
-        "FROM wp_data",
-        _eng,
-    ).rename(columns=_WP_REVERSE)
+def load_hadir_df() -> pd.DataFrame:
+    """
+    Fetch the full hadir_data table from Supabase and apply all transforms.
 
-except Exception as exc:
-    import warnings
-    warnings.warn(f"[data.py] Could not load from Supabase: {exc}. Using empty DataFrames.")
-    df_raw    = pd.DataFrame(columns=_HADIR_DISPLAY_COLS)
-    df_wp_raw = pd.DataFrame(columns=_WP_DISPLAY_COLS)
+    Returns an empty DataFrame (with the correct columns) on any DB error
+    so callers never receive a None or raise an exception.
+    """
+    try:
+        eng = _get_engine()
+        df = pd.read_sql(
+            "SELECT email, nama, no_whatsapp, kota_provinsi, tempat_kegiatan, "
+            "tanggal, sesi, jumlah_sesi, tahun, bulan, kategori, nama_event, "
+            "lokasi_event, gender, kota, provinsi, usia, kelompok_usia, "
+            "profesi_asli, kategori_profesi, harapan_asli, topik_harapan, "
+            "keluhan_asli, topik_keluhan, wilayah, workshop_yang_diikuti "
+            "FROM hadir_data",
+            eng,
+        ).rename(columns=_HADIR_REVERSE)
+    except Exception as exc:
+        import warnings
+        warnings.warn(f"[data.py] load_hadir_df failed: {exc}")
+        return pd.DataFrame(columns=_HADIR_DISPLAY_COLS + ["Event Label", "Frekuensi Kehadiran"])
 
-# ── Build a combined event label (distinguishes same-name events at different locations)
-if not df_raw.empty:
-    df_raw["Event Label"] = df_raw.apply(
+    if df.empty:
+        return df
+
+    # ── Combined event label (distinguishes same-name events in different cities)
+    df["Event Label"] = df.apply(
         lambda r: r["Nama Event"] + " - " + r["Lokasi Event"]
         if isinstance(r["Lokasi Event"], str) and r["Lokasi Event"].strip() not in ("", "-")
         else r["Nama Event"],
         axis=1,
     )
 
-    # ── Frequency bucket per Nama (computed on full dataset — person property)
-    _freq_map = df_raw["Nama"].value_counts()
-    df_raw["_freq"] = df_raw["Nama"].map(_freq_map)
-    df_raw["Frekuensi Kehadiran"] = df_raw["_freq"].apply(
+    # ── Frequency bucket per Nama (person-level property)
+    _freq_map = df["Nama"].value_counts()
+    df["_freq"] = df["Nama"].map(_freq_map)
+    df["Frekuensi Kehadiran"] = df["_freq"].apply(
         lambda x: ">5 Kali" if x > 5 else (f"{x} Kali" if x >= 2 else "1 Kali")
     )
-    df_raw = df_raw.drop(columns=["_freq"])
+    df = df.drop(columns=["_freq"])
+    return df
+
+
+def load_wp_df() -> pd.DataFrame:
+    """
+    Fetch the full wp_data table from Supabase.
+
+    Returns an empty DataFrame (with the correct columns) on any DB error.
+    """
+    try:
+        eng = _get_engine()
+        return pd.read_sql(
+            "SELECT email, nama, no_whatsapp, kota_provinsi, tempat_kegiatan, "
+            "tanggal, sesi, jumlah_sesi, tahun, bulan, kategori, nama_event, "
+            "lokasi_event, gender, kota, provinsi, district, country "
+            "FROM wp_data",
+            eng,
+        ).rename(columns=_WP_REVERSE)
+    except Exception as exc:
+        import warnings
+        warnings.warn(f"[data.py] load_wp_df failed: {exc}")
+        return pd.DataFrame(columns=_WP_DISPLAY_COLS)
+
 

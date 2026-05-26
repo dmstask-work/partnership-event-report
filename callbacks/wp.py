@@ -1,13 +1,26 @@
+import io
 from datetime import date
 
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from dash import Input, Output, State, ctx, dash_table, dcc, html
+from dash.exceptions import PreventUpdate
 
 from dash_instance import app
 from config import BLUE_SCALE, WARM_SCALE, CHART_LAYOUT
+from data import load_wp_df
 from utils import filter_wp, kpi_card
+
+
+# ── Cache loader ─────────────────────────────────────────────────────────────
+@app.callback(
+    Output("wp-data-cache", "data"),
+    Input("data-refresh-ts", "data"),
+)
+def load_wp_cache(_ts):
+    df = load_wp_df()
+    return df.to_json(date_format="iso", orient="split")
 
 
 @app.callback(
@@ -23,16 +36,25 @@ from utils import filter_wp, kpi_card
     Input("wp-dd-sesi",     "value"),
     Input("wp-dd-provinsi", "value"),
     Input("wp-dd-country",  "value"),
+    Input("wp-data-cache",  "data"),
 )
-def update_wp(sesi, provinsi, country):
-    df = filter_wp(sesi, provinsi, country)
-
+def update_wp(sesi, provinsi, country, wp_json):
     def _empty(title=""):
         fig = go.Figure()
         fig.update_layout(**CHART_LAYOUT, title=title)
         fig.add_annotation(text="Data tidak tersedia", x=0.5, y=0.5,
                            showarrow=False, font=dict(size=14, color="#aaa"))
         return fig
+
+    if not wp_json:
+        empty_tbl = html.P("Data sedang dimuat...", className="text-muted small")
+        return ([], _empty("Top Sesi"), _empty("Gender"),
+                _empty("Negara"), _empty("Distrik"),
+                _empty("Frekuensi Kehadiran Peserta"),
+                empty_tbl, empty_tbl, [])
+
+    df_full = pd.read_json(io.StringIO(wp_json), orient="split")
+    df = filter_wp(df_full, sesi, provinsi, country)
 
     if df.empty:
         empty_tbl = html.P("Data tidak tersedia.", className="text-muted small")
@@ -116,7 +138,6 @@ def update_wp(sesi, provinsi, country):
     dist_top    = dist_counts.head(6)
     lainnya     = dist_counts.iloc[6:].sum()
     if lainnya > 0:
-        import pandas as pd
         dist_top = pd.concat([dist_top, pd.Series({"Lainnya": lainnya})])
     dist_colors = ["#ADD3FA", "#B9EBFA", "#FAFAD5",
                    "#FAEFC3", "#FADFAA", "#FAD4C8", "#d0d8e4"]
@@ -305,11 +326,23 @@ def _build_prov_fig(prov_df, page_idx):
     Input("wp-dd-sesi",     "value"),
     Input("wp-dd-provinsi", "value"),
     Input("wp-dd-country",  "value"),
+    Input("wp-data-cache",  "data"),
     State("wp-prov-page",   "data"),
 )
 def update_prov_page(n_first, n_prev, n_next, n_last,
-                     sesi, provinsi, country, cur_page):
-    df      = filter_wp(sesi, provinsi, country)
+                     sesi, provinsi, country, wp_json, cur_page):
+    def _empty_fig():
+        fig = go.Figure()
+        fig.update_layout(**CHART_LAYOUT, title="Distribusi Provinsi")
+        fig.add_annotation(text="Data tidak tersedia", x=0.5, y=0.5,
+                           showarrow=False, font=dict(size=14, color="#aaa"))
+        return fig
+
+    if not wp_json:
+        return 0, _empty_fig(), "0 / 0"
+
+    df_full = pd.read_json(io.StringIO(wp_json), orient="split")
+    df      = filter_wp(df_full, sesi, provinsi, country)
     prov_df = _get_prov_df(df)
     pages   = _get_prov_pages(prov_df)
     n_pages = len(pages)
@@ -343,12 +376,16 @@ def update_prov_page(n_first, n_prev, n_next, n_last,
 @app.callback(
     Output("wp-table-riwayat", "children"),
     Input("wp-dd-search-peserta", "value"),
+    State("wp-data-cache", "data"),
 )
-def wp_show_riwayat(nama):
-    from data import df_wp_raw
+def wp_show_riwayat(nama, wp_json):
     if not nama:
         return html.P("Pilih nama peserta untuk melihat riwayat kehadiran.",
                       className="text-muted small")
+    if not wp_json:
+        return html.P("Data belum dimuat. Silakan tunggu sebentar.",
+                      className="text-muted small")
+    df_wp_raw = pd.read_json(io.StringIO(wp_json), orient="split")
     cols = [c for c in ["Nama Event", "Lokasi Event", "Tanggal", "Sesi"]
             if c in df_wp_raw.columns]
     rows = df_wp_raw[df_wp_raw["Nama"] == nama][cols].copy()

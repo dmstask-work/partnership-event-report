@@ -1,10 +1,12 @@
 from dash import dcc, html
 import dash_bootstrap_components as dbc
 from config import FREQ_ORDER, WILAYAH_ORDER, SECTION_STYLE
-from data import df_raw
+from data import load_hadir_df
 
 
 def build_tab_hadir():
+    # Fresh DB query on every page load so dropdowns reflect current data.
+    df_raw = load_hadir_df()
     return dbc.Tab(
         label="Hadir Report",
         tab_id="tab-hdr",

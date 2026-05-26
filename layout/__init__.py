@@ -1,4 +1,5 @@
 import dash_bootstrap_components as dbc
+from dash import dcc
 
 from .header import build_header
 from .tab_hadir import build_tab_hadir
@@ -41,6 +42,14 @@ def build_layout(role: str = "viewer") -> dbc.Container:
             },
             className="mb-0 mt-1 justify-content-center",
         ),
+        # ── Global data stores ────────────────────────────────────────────────
+        # data-refresh-ts: integer counter incremented by every CRUD success.
+        # Triggers the two cache-loading callbacks below, which pull fresh
+        # snapshots from Supabase and store them as JSON.  Report callbacks
+        # read the JSON stores on every filter interaction — zero extra DB hits.
+        dcc.Store(id="data-refresh-ts",   data=0,    storage_type="memory"),
+        dcc.Store(id="hadir-data-cache",  storage_type="memory"),
+        dcc.Store(id="wp-data-cache",     storage_type="memory"),
     ], fluid=True, style={
         "fontFamily": "Segoe UI, sans-serif",
         "padding": "0 20px 5px 20px",
