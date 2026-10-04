@@ -1,6 +1,6 @@
 # ── Ordering ───────────────────────────────────────────────────────────────
 FREQ_ORDER    = ["1 Kali", "2 Kali", "3 Kali", "4 Kali", "5 Kali", ">5 Kali"]
-WILAYAH_ORDER = ["Jabodetabek", "Jawa Tengah", "Jawa Timur", "Bali"]
+WILAYAH_ORDER = ["Jabodetabek", "Jawa Tengah", "Jawa Timur", "Bali", "Wilayah Lain"]
 
 # ── Colour palettes ────────────────────────────────────────────────────────
 PALETTE = [
